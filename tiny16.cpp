@@ -1149,11 +1149,219 @@ start:
   HALT
 )ASM";
 
+static const char *EX_FACT = R"ASM(
+; Recursive factorial on Tiny16:
+;   fact(n) = 1 if n <= 1
+;             n * fact(n-1) otherwise
+;   Input : r0 = n
+;   Output: r0 = n!
+;   Uses  : r1, r2, r3, r4 (saved on stack)
+
+.org 0x0000
+
+start:
+  ; Initialize stack pointer
+  LDI r7, 0x7FFC
+
+  ; Compute fact(5)
+  LDI r0, 5
+  CALL fact            ; r0 = fact(5) = 120
+
+  ; Print the result in hex: "Result: 0x0078\n"
+  CALL print_result
+
+  HALT
+
+; --------------------------------------------------
+; fact:
+;   Input : r0 = n
+;   Output: r0 = n!
+;   Clobbers: r1,r2,r3,r4 (saved/restored)
+; --------------------------------------------------
+fact:
+  ; Prologue: save r1..r4 on stack
+
+  ; push r1
+  ADDI r7, #-2
+  ST   r1, [r7+0]
+
+  ; push r2
+  ADDI r7, #-2
+  ST   r2, [r7+0]
+
+  ; push r3
+  ADDI r7, #-2
+  ST   r3, [r7+0]
+
+  ; push r4
+  ADDI r7, #-2
+  ST   r4, [r7+0]
+
+  ; ---- Base case: if (n <= 1) return 1 ----
+  CMPI r0, #1         ; compare n with 1 => flags from (n - 1)
+  JZ   base_case      ; if n == 1
+  JN   base_case      ; if n <  1 (negative)
+
+  ; ---- Recursive case: n > 1 ----
+  ; Save n in r1
+  MOV  r1, r0         ; r1 = n
+
+  ; Call fact(n-1)
+  ADDI r0, #-1        ; r0 = n-1
+  CALL fact           ; r0 = fact(n-1)
+
+  ; Now:
+  ;   r1 = n
+  ;   r0 = fact(n-1)
+  ; We need r0 = n * fact(n-1)
+
+  MOV  r2, r0         ; r2 = fact(n-1) (multiplicand)
+  MOV  r3, r1         ; r3 = n        (counter)
+  LDI  r0, 0          ; r0 = result = 0
+  MOV  r4, r2         ; r4 = multiplicand copy
+
+mul_loop:
+  CMPI r3, #0         ; while (n > 0)
+  JZ   mul_done
+  ADD  r0, r4         ; result += multiplicand
+  ADDI r3, #-1        ; n--
+  JMP  mul_loop
+
+mul_done:
+  ; r0 contains n * fact(n-1)
+  JMP  epilogue
+
+base_case:
+  ; n <= 1 => return 1
+  LDI  r0, 1
+
+epilogue:
+  ; Restore r4,r3,r2,r1 in reverse (LIFO) order
+
+  ; pop r4
+  LD   r4, [r7+0]
+  ADDI r7, #2
+
+  ; pop r3
+  LD   r3, [r7+0]
+  ADDI r7, #2
+
+  ; pop r2
+  LD   r2, [r7+0]
+  ADDI r7, #2
+
+  ; pop r1
+  LD   r1, [r7+0]
+  ADDI r7, #2
+
+  RET
+
+
+; --------------------------------------------------
+; print_result:
+;   Uses r1,r2,r3,r5 as scratch.
+;   Prints: "Result: 0x" + 4 hex digits of r0 + "\n"
+; --------------------------------------------------
+print_result:
+  ; Copy result from r0 into r1
+  MOV  r1, r0
+
+  ; Print "Result: 0x"
+  ; ASCII: R=82, e=101, s=115, u=117, l=108, t=116, ':'=58, ' '=32, '0'=48, 'x'=120
+
+  LDI r2, 82      ; 'R'
+  OUT r2, [0xFF00]
+  LDI r2, 101     ; 'e'
+  OUT r2, [0xFF00]
+  LDI r2, 115     ; 's'
+  OUT r2, [0xFF00]
+  LDI r2, 117     ; 'u'
+  OUT r2, [0xFF00]
+  LDI r2, 108     ; 'l'
+  OUT r2, [0xFF00]
+  LDI r2, 116     ; 't'
+  OUT r2, [0xFF00]
+  LDI r2, 58      ; ':'
+  OUT r2, [0xFF00]
+  LDI r2, 32      ; ' '
+  OUT r2, [0xFF00]
+  LDI r2, 48      ; '0'
+  OUT r2, [0xFF00]
+  LDI r2, 120     ; 'x'
+  OUT r2, [0xFF00]
+
+  ; Now print r1 as 4 hex digits
+  ; We'll use r5 as mask (0x000F), r2 as nibble, r3 in print_nibble.
+
+  LDI r5, 0x000F
+
+  ; ---- High nibble (bits 12..15) ----
+  MOV r2, r1
+  SHR r2, 4
+  SHR r2, 4
+  SHR r2, 4        ; r2 = r1 >> 12
+  AND r2, r5
+  CALL print_nibble
+
+  ; ---- Next nibble (bits 8..11) ----
+  MOV r2, r1
+  SHR r2, 4
+  SHR r2, 4        ; r2 = r1 >> 8
+  AND r2, r5
+  CALL print_nibble
+
+  ; ---- Next nibble (bits 4..7) ----
+  MOV r2, r1
+  SHR r2, 4        ; r2 = r1 >> 4
+  AND r2, r5
+  CALL print_nibble
+
+  ; ---- Lowest nibble (bits 0..3) ----
+  MOV r2, r1
+  AND r2, r5
+  CALL print_nibble
+
+  ; Newline
+  LDI r2, 10      ; '\n'
+  OUT r2, [0xFF00]
+
+  RET
+
+
+; --------------------------------------------------
+; print_nibble:
+;   Input : r2 = value 0..15
+;   Output: prints one hex digit via UART
+;   Uses  : r2, r3
+; --------------------------------------------------
+print_nibble:
+  LDI r3, 10
+  CMP r2, r3
+  JN  pn_digit       ; if r2 < 10 -> digit
+
+  ; r2 >= 10 -> 'A' + (r2-10)
+  LDI r3, 55         ; 'A'(65) - 10 = 55
+  ADD r2, r3
+  JMP pn_out
+
+pn_digit:
+  ; r2 < 10 -> '0' + r2
+  LDI r3, 48         ; '0'
+  ADD r2, r3
+
+pn_out:
+  OUT r2, [0xFF00]
+  RET
+)ASM";
+
+
+
 // in-memory "filesystem"
 unordered_map<string,string> vfs = {
     {"examples/hello.asm", EX_HELLO},
     {"examples/fib.asm",   EX_FIB},
-    {"examples/timer.asm", EX_TIMER}
+    {"examples/timer.asm", EX_TIMER},
+    {"examples/fact.asm",  EX_FACT}
 };
 
 string slurpFile(const string& path){
