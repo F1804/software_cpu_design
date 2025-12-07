@@ -1,24 +1,28 @@
-# Tiny16 Software CPU  
+# Tiny16 Software CPU & Program Layout/Execution  
 **CMPE 220 – System Software (FA25)**  
-A complete software-implemented 16-bit CPU with assembler, emulator, memory-mapped I/O, timer hardware, and example programs.
+
+This repository contains two related assignments:
+
+1. **Tiny16 – Software CPU Design**  
+2. **Program Layout & Execution – Recursion, Call Stack, and Memory Layout**
 
 ---
 
 ## 🚀 Project Overview
 
-This project implements a simple **16-bit CPU (Tiny16)** in C++, including:
+Tiny16 is a fully software-implemented 16-bit CPU written in C++.  
+Features include:
 
+- CPU core (registers, ALU, condition flags)
 - Instruction Set Architecture (ISA)
-- CPU core (registers, ALU, flags, control unit)
 - Memory + MMIO (UART + Timer)
-- A two-pass assembler
-- An emulator capable of loading, execauting, and dumping memory
-- Example assembly programs:
+- Two-pass assembler
+- Emulator with memory dump support
+- Example programs:
   - `hello.asm`
   - `timer.asm`
   - `fib.asm`
-
-The project demonstrates fetch–decode–execute cycles, branching, arithmetic/logic, memory addressing, stack calls, and interaction with hardware-like components.
+  - `fact.asm` (recursion assignment)
 
 ---
 
@@ -27,51 +31,49 @@ The project demonstrates fetch–decode–execute cycles, branching, arithmetic/
 ```
 software_cpu_design/
 │
-├── tiny16.cpp          # Main CPU, assembler, emulator source code
+├── tiny16.cpp
+├── factorial.c
+├── Factorial Demo.mp4
+├── Sample Drawing.png
 ├── examples/
-│   ├── hello.asm       # UART Hello World
-│   ├── timer.asm       # MMIO Timer example
-│   └── fib.asm         # Fibonacci generator
-└── README.md           # Project instructions
+│   ├── fact.asm
+│   ├── hello.asm
+│   ├── timer.asm
+│   └── fib.asm
+└── README.md
 ```
 
 ---
 
-## 🔧 Requirements
+# 🔧 Requirements
 
 - macOS or Linux  
-- g++ with C++17 support  
-- Terminal / shell environment  
+- `g++` with C++17 support  
+- Terminal or shell environment  
 
 ---
 
-## 🛠 Compilation
+# 🛠 Compilation
 
-Compile the CPU and assembler/emulator using:
+Compile Tiny16:
 
 ```bash
 g++ -std=c++17 -O2 -o tiny16 tiny16.cpp
 ```
 
-This will generate the executable:
-
-```
-tiny16
-```
+This produces the executable `tiny16`.
 
 ---
 
-## ▶️ Running Example Programs
+# ▶️ Running Example Programs
 
-### 1. **Hello World Example**
-
-Runs a simple UART output routine.
+## 1. Hello World
 
 ```bash
 ./tiny16 run examples/hello.asm
 ```
 
-**Expected Output:**
+Expected:
 
 ```
 Hello, World!
@@ -79,15 +81,13 @@ Hello, World!
 
 ---
 
-### 2. **Timer Example**
-
-Demonstrates memory-mapped I/O and timer compare interrupt behavior.
+## 2. Timer Example
 
 ```bash
 ./tiny16 run examples/timer.asm
 ```
 
-**Expected Output:**
+Expected:
 
 ```
 STimer
@@ -95,51 +95,127 @@ STimer
 
 ---
 
-### 3. **Fibonacci Example**
+## 3. Fibonacci Example
 
-This program computes the first 10 Fibonacci numbers and stores them in memory.
-
-#### Assemble the program:
+### Assemble:
 
 ```bash
 ./tiny16 asm examples/fib.asm -o fib.bin
 ```
 
-#### Emulate the binary starting at address `0x0100`:
+### Emulate:
 
 ```bash
 ./tiny16 emu fib.bin --base 0x0000 --pc 0x0100 --dump 0x0100 0x0140
 ```
 
-You will see a memory dump containing the first 10 Fibonacci numbers in 16-bit words.
+---
+
+# 🧠 Memory-Mapped I/O (MMIO)
+
+| Address | Register           | Description |
+|--------|--------------------|-------------|
+| 0xFF10 | TIMER (low)        | Timer low byte |
+| 0xFF11 | TIMER (high)       | Timer high byte |
+| 0xFF12 | TIMERCMP (low)     | Compare low byte |
+| 0xFF13 | TIMERCMP (high)    | Compare high byte |
+| 0xFF14 | IRQ Pending Flag   | Set to 1 when timer matches compare |
 
 ---
 
-## 🧠 Memory-Mapped I/O (MMIO)
+# 🔥 Program Layout & Execution (Recursion Assignment)
 
-Tiny16 supports:
+This portion of the project demonstrates recursion, stack behavior, and memory layout on both C and Tiny16.
 
-### **UART Output (0xFF00)**
-Writing a byte prints it to stdout.
+---
 
-### **Timer Registers**
-| Address    | Register      | Description |
-|------------|---------------|-------------|
-| `0xFF10`   | TIMER (low)   | Current timer value (low byte) |
-| `0xFF11`   | TIMER (high)  | Current timer value (high byte) |
-| `0xFF12`   | TIMERCMP (low) | Timer compare register (low byte) |
-| `0xFF13`   | TIMERCMP (high)| Timer compare register (high byte) |
-| `0xFF14`   | IRQ Pending Flag | 1 when timer matches compare |
+## 📌 C Recursive Factorial
 
-The emulator increments TIMER after each instruction and sets the IRQ flag when:
+Source: `factorial.c`
+
+Compile:
+
+```bash
+gcc -std=c11 -O2 -o factorial factorial.c
+```
+
+Run:
+
+```bash
+./factorial
+```
+
+Example:
 
 ```
-TIMER == TIMERCMP
+Enter a number: 5
+Factorial of 5 = 120
 ```
 
 ---
 
-## 👥 Team Members
+## 📌 Tiny16 Recursive Factorial (Assembly)
+
+Assembly file: `examples/fact.asm`
+
+Run directly:
+
+```bash
+./tiny16 run examples/fact.asm}
+```
+
+Demonstrates:
+
+- CALL / RET  
+- Stack-frame creation  
+- Recursion expansion  
+- Stack unwinding  
+- Returning values  
+
+---
+
+## 📌 Examine Memory Layout
+
+Assemble:
+
+```bash
+./tiny16 asm examples/fact.asm -o fact.bin
+```
+
+Emulate with dump:
+
+```bash
+./tiny16 emu fact.bin --base 0x0000 --pc 0x0000 --dump 0x0000 0x01FF
+```
+
+Shows:
+
+- Code section  
+- Data section  
+- Stack frames  
+- Return addresses  
+
+---
+
+# 🎥 Recursion Video
+
+Included in the repo:
+
+```
+Factorial Demo.mp4
+```
+
+Covers:
+
+- Tiny16 stack behavior  
+- Function calls  
+- Base case handling  
+- Recursion depth  
+- Stack unwinding  
+
+---
+
+# 👥 Team Members
 
 - Abdul Muqtadir Mohammed  
 - Akash Kishorbhai Devani  
@@ -148,8 +224,6 @@ TIMER == TIMERCMP
 
 ---
 
-## 📄 License
+# 📄 License
 
-This project is for academic use only (CMPE 220 – System Software FA25).
-
----
+Academic use only — CMPE 220 (FA25).
